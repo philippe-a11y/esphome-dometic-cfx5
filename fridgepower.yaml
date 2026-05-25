@@ -30,7 +30,7 @@ web_server:
   version: 3
 
 external_components:
-  - source: github://YOURNAME/esphome-dometic-cfx
+  - source: github://philippe-a11y/esphome-dometic-cfx
     components: [dometic_cfx_ble]
 
 # Optional: INA226 current sensor on the 12V supply line
