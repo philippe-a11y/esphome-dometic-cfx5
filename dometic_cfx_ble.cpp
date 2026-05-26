@@ -160,14 +160,6 @@ void DometicCfxBle::loop() {
     return;
   }
 
-  // Re-subscribe every 10s to catch POWER_SOURCE and other non-push params
-  if (this->subscribed_ && now - this->last_subscribe_ms_ > 10000) {
-    ESP_LOGD(TAG, "Re-subscribing all params");
-    this->subscribed_ = false;
-    this->subscribe_idx_ = 0;
-    this->last_subscribe_ms_ = now;
-    return;
-  }
 
   // Send queued set commands
   if (this->send_queue_.empty())
