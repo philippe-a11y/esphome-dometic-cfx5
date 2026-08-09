@@ -30,7 +30,7 @@ Add to your ESPHome YAML:
 
 ```yaml
 external_components:
-  - source: github://YOURNAME/esphome-dometic-cfx
+  - source: github://philippe-a11y/esphome-dometic-cfx
     components: [dometic_cfx_ble]
 ```
 
