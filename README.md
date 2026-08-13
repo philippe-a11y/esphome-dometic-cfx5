@@ -1,4 +1,4 @@
-# esphome-dometic-cfx5
+# esphome-dometic-cfx
 
 ESPHome external component for integrating the **Dometic CFX5 portable fridge/freezer** into Home Assistant via BLE (Bluetooth Low Energy).
 
@@ -30,11 +30,19 @@ Add to your ESPHome YAML:
 
 ```yaml
 external_components:
-  - source: github://philippe-a11y/esphome-dometic-cfx
+  - source: github://philippe-a11y/esphome-dometic-cfx5
     components: [dometic_cfx_ble]
 ```
 
 See [`example/fridgepower.yaml`](example/fridgepower.yaml) for a full working configuration.
+
+## Connection Behavior
+
+The component subscribes once after connecting. All relevant parameters
+(temperature, door, voltage, power source, errors) arrive as push updates.
+An earlier version re-subscribed periodically, which could trigger a
+"communication error" alert on the cooler after extended runtime - do not
+reintroduce polling loops.
 
 ## BLE Pairing
 
@@ -72,7 +80,7 @@ Temperatures and voltages are encoded as `int32 LE / 1000`.
 | `07 00 00 1A` | Door open |
 | `10 00 00 1A` | Power source (0=AC, 1=DC) |
 | `0C 00 00 1A` | Battery voltage |
-| `12 00 00 1A` | Door alert (non-empty = alarm active) |
+| `12 00 00 1A` | Error/alert array (uint16 LE codes; 23 = door open too long) |
 
 ## Tested With
 

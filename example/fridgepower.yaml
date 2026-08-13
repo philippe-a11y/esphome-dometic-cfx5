@@ -30,7 +30,7 @@ web_server:
   version: 3
 
 external_components:
-  - source: github://philippe-a11y/esphome-dometic-cfx
+  - source: github://philippe-a11y/esphome-dometic-cfx5
     components: [dometic_cfx_ble]
 
 # Optional: INA226 current sensor on the 12V supply line
@@ -48,7 +48,7 @@ esp32_ble_tracker:
     duration: 30s
 
 ble_client:
-  - mac_address: XX:XX:XX:XX:XX:XX  # <-- replace with your CFX5 MAC
+  - mac_address: EC:C9:FF:BF:B4:8A   # <-- replace with your CFX5 MAC
     id: cfx_ble_client
     auto_connect: true
     on_connect:

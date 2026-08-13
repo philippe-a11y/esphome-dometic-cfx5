@@ -160,7 +160,6 @@ void DometicCfxBle::loop() {
     return;
   }
 
-
   // Send queued set commands
   if (this->send_queue_.empty())
     return;
