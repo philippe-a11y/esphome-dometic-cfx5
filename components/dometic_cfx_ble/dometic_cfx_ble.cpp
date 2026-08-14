@@ -162,6 +162,15 @@ void DometicCfxBle::loop() {
     return;
   }
 
+  // Re-subscribe every 10s to catch POWER_SOURCE and other non-push params
+  // if (this->subscribed_ && now - this->last_subscribe_ms_ > 10000) {
+  //ESP_LOGD(TAG, "Re-subscribing all params");
+  //this->subscribed_ = false;
+  //this->subscribe_idx_ = 0;
+  //this->last_subscribe_ms_ = now;
+  //return;
+  //}
+
   // Send queued set commands
   if (this->send_queue_.empty())
     return;
@@ -477,7 +486,7 @@ float DometicCfxBle::decode_to_float_(const std::vector<uint8_t> &bytes,
   }
 
   if (type_hint == "INT32_MILLIAMP") {
-    // 4-byte int32 LE, /1000 = A (signed: charge vs draw)
+    // 4-byte int32 LE, /1000 = A (signed: positive draw, negative charge)
     if (bytes.size() < 4) return NAN;
     int32_t raw;
     memcpy(&raw, bytes.data(), 4);

@@ -16,7 +16,7 @@ from esphome import automation
 from esphome.components.ble_client import CONF_BLE_CLIENT_ID
 from esphome.components import ble_client
 
-AUTO_LOAD = ["esp32_ble_tracker", "ble_client", "number", "switch", "text_sensor", "binary_sensor", "sensor", "climate"]
+AUTO_LOAD = ["esp32_ble_tracker", "ble_client", "select", "number", "switch", "text_sensor", "binary_sensor", "sensor", "climate"]
 DEPENDENCIES = ['esp32_ble_tracker', 'ble_client']
 
 
@@ -80,7 +80,7 @@ TOPIC_TYPES = [
     "FIRMWARE_VERSION",
     "WIFI_MODE",
     "BLUETOOTH_MODE",
-    "DOOR_ALERT",
+    "WIFI_AP_CONNECTED",
     "STATION_SSID_0",
     "STATION_SSID_1",
     "STATION_SSID_2",
