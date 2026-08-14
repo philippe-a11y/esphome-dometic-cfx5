@@ -16,7 +16,7 @@ from esphome import automation
 from esphome.components.ble_client import CONF_BLE_CLIENT_ID
 from esphome.components import ble_client
 
-AUTO_LOAD = ["esp32_ble_tracker", "ble_client", "select", "number", "switch", "text_sensor", "binary_sensor", "sensor", "climate"]
+AUTO_LOAD = ["esp32_ble_tracker", "ble_client", "number", "switch", "text_sensor", "binary_sensor", "sensor", "climate"]
 DEPENDENCIES = ['esp32_ble_tracker', 'ble_client']
 
 
