@@ -1,3 +1,6 @@
+# Beispielkonfiguration für die Dometic CFX5 ESPHome-Komponente.
+# MAC-Adresse und Secrets anpassen.
+
 esphome:
   name: fridgepower
   friendly_name: FridgePower
@@ -32,8 +35,10 @@ web_server:
 external_components:
   - source: github://philippe-a11y/esphome-dometic-cfx5
     components: [dometic_cfx_ble]
+    refresh: 0s
 
-# Optional: INA226 current sensor on the 12V supply line
+# Optionaler INA226-Stromsensor an der 12V-Zuleitung.
+# Kann entfallen, seit die Box ihren eigenen Strom meldet (CURRENT).
 i2c:
   sda: GPIO4
   scl: GPIO5
@@ -48,7 +53,7 @@ esp32_ble_tracker:
     duration: 30s
 
 ble_client:
-  - mac_address: EC:C9:FF:BF:B4:8A   # <-- replace with your CFX5 MAC
+  - mac_address: EC:C9:FF:BF:B4:8A   # <-- eigene CFX5-MAC eintragen
     id: cfx_ble_client
     auto_connect: true
     on_connect:
@@ -59,7 +64,7 @@ ble_client:
 dometic_cfx_ble:
   id: dometic_cfx_ble1
   ble_client_id: cfx_ble_client
-  product_type: SZ
+  product_type: SZ   # SZ = Single Zone, DZ = Dual Zone, SZI = Single Zone + Icemaker
 
 button:
   - platform: template
@@ -73,7 +78,8 @@ button:
           App.safe_reboot();
 
 sensor:
-  # INA226 current sensor (optional, remove if not present)
+  # Optionaler externer INA226. Kann entfallen, seit die Box ihren
+  # eigenen Strom meldet (siehe "CFX Strom (intern)" weiter unten).
   - platform: ina226
     address: 0x40
     shunt_resistance: 0.002 ohm
@@ -96,7 +102,7 @@ sensor:
         return v * i;
       }
       if (!isnan(i)) {
-        return 12.0f * i;  // fallback to 12V nominal
+        return 12.0f * i;
       }
       return 0.0f;
     update_interval: 5s
@@ -118,8 +124,8 @@ sensor:
     accuracy_decimals: 3
     icon: mdi:car-battery
 
-  # The cooler reports its own current draw (topic 0x0F), so the INA226
-  # above is optional. Positive = draw, negative = charging.
+  # Von der Box selbst gemeldeter Strom (Topic 0x0F).
+  # Positiv = Verbrauch, negativ = Laden. Macht den INA226 optional.
   - platform: dometic_cfx_ble
     dometic_cfx_ble_id: dometic_cfx_ble1
     type: CURRENT

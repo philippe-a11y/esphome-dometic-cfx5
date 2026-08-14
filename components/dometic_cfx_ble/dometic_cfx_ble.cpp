@@ -21,15 +21,6 @@ static const char *NOTIFY_UUID  = "537a0402-0995-481f-926c-1604e23fd515";
 // Publish format:    0x10 p1 p2 p3 p4 value...
 // Values are int32 little-endian, /1000 for temp (millidegrees) and voltage (millivolts)
 
-static const char *power_source_str(int v) {
-  switch (v) {
-    case 0: return "AC";
-    case 1: return "DC";
-    case 2: return "Solar";
-    default: return nullptr;
-  }
-}
-
 // ----------------- Topic table (CFX5 new protocol) --------------------------
 // param = {p1, p2, p3, p4} as sent in DDM frames
 // Group 0x00 0x1A = realtime data
@@ -120,15 +111,6 @@ void DometicCfxBle::loop() {
     }
     return;
   }
-
-  // Re-subscribe every 10s to catch POWER_SOURCE and other non-push params
-  // if (this->subscribed_ && now - this->last_subscribe_ms_ > 10000) {
-  //ESP_LOGD(TAG, "Re-subscribing all params");
-  //this->subscribed_ = false;
-  //this->subscribe_idx_ = 0;
-  //this->last_subscribe_ms_ = now;
-  //return;
-  //}
 
   // Send queued set commands
   if (this->send_queue_.empty())
@@ -359,8 +341,6 @@ void DometicCfxBle::update_entity_(const std::string &topic,
       it->second->publish_state(v);
       if (topic == "COMPARTMENT_0_MEASURED_TEMPERATURE")
         this->cfx_measured_temp_ = v;
-      if (topic == "BATTERY_VOLTAGE_LEVEL")
-        ; // no climate update needed
     }
     return;
   }
