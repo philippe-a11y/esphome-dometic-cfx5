@@ -118,6 +118,32 @@ sensor:
     accuracy_decimals: 3
     icon: mdi:car-battery
 
+  # The cooler reports its own current draw (topic 0x0F), so the INA226
+  # above is optional. Positive = draw, negative = charging.
+  - platform: dometic_cfx_ble
+    dometic_cfx_ble_id: dometic_cfx_ble1
+    type: CURRENT
+    name: "CFX Strom (intern)"
+    id: cfx_strom_intern
+    unit_of_measurement: "A"
+    accuracy_decimals: 2
+    icon: mdi:current-dc
+
+  - platform: template
+    name: "CFX Leistung (intern)"
+    unit_of_measurement: W
+    device_class: power
+    state_class: measurement
+    accuracy_decimals: 1
+    lambda: |-
+      float v = id(cfx_spannung).state;
+      float i = id(cfx_strom_intern).state;
+      if (!isnan(v) && !isnan(i)) {
+        return v * i;
+      }
+      return NAN;
+    update_interval: 5s
+
 climate:
   - platform: dometic_cfx_ble
     dometic_cfx_ble_id: dometic_cfx_ble1

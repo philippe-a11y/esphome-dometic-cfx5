@@ -43,6 +43,7 @@ const std::map<std::string, TopicInfo> TOPICS = {
     {"COOLER_POWER",                       {{0x03, 0x00, 0x00, 0x1A}, "INT8_BOOLEAN",  "Cooler power"}},
     {"COMPARTMENT_0_POWER",                {{0x0B, 0x00, 0x00, 0x1A}, "INT8_BOOLEAN",  "Compartment 1 power"}},
     {"BATTERY_VOLTAGE_LEVEL",              {{0x0C, 0x00, 0x00, 0x1A}, "INT32_MILLIVOLT","Battery voltage"}},
+    {"CURRENT",                            {{0x0F, 0x00, 0x00, 0x1A}, "INT32_MILLIAMP", "Current draw"}},
     {"POWER_SOURCE",                       {{0x10, 0x00, 0x00, 0x1A}, "POWER_SOURCE_TEXT", "Power source"}},
     {"BLUETOOTH_MODE",                     {{0x06, 0x00, 0x00, 0x1A}, "INT8_BOOLEAN",  "Bluetooth mode (unused)"}},
     {"COMPARTMENT_0_DOOR_OPEN",            {{0x07, 0x00, 0x00, 0x1A}, "INT8_BOOLEAN",  "Compartment 1 door open"}},
@@ -86,6 +87,7 @@ static const uint8_t SUBSCRIBE_ALL[][4] = {
     {0x08, 0x00, 0x00, 0x1A},  // battery+current
     {0x0B, 0x00, 0x00, 0x1A},  // compartment power
     {0x0C, 0x00, 0x00, 0x1A},  // battery voltage
+    {0x0F, 0x00, 0x00, 0x1A},  // current draw
     {0x10, 0x00, 0x00, 0x1A},  // bluetooth mode
     {0x11, 0x00, 0x00, 0x1A},
     {0x12, 0x00, 0x00, 0x1A},
@@ -470,6 +472,14 @@ float DometicCfxBle::decode_to_float_(const std::vector<uint8_t> &bytes,
     // 4-byte uint32 LE, /1000 = V
     if (bytes.size() < 4) return NAN;
     uint32_t raw;
+    memcpy(&raw, bytes.data(), 4);
+    return static_cast<float>(raw) / 1000.0f;
+  }
+
+  if (type_hint == "INT32_MILLIAMP") {
+    // 4-byte int32 LE, /1000 = A (signed: charge vs draw)
+    if (bytes.size() < 4) return NAN;
+    int32_t raw;
     memcpy(&raw, bytes.data(), 4);
     return static_cast<float>(raw) / 1000.0f;
   }
