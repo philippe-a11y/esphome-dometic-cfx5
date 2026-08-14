@@ -42,6 +42,19 @@ static std::string family_from_model(const std::string &model) {
   return "CFX";
 }
 
+// Readable product-type name, matching the app's PRODUCT_TYPE_NAMES.
+static std::string product_type_name(uint8_t t) {
+  switch (t) {
+    case 0: return "Unconfigured";
+    case 1: return "Single Zone";
+    case 2: return "Single Zone with ice maker";
+    case 3: return "Dual Zone";
+    case 4: return "Deli Box";
+    default: return "type " + std::to_string(t);
+  }
+}
+
+
 
 // CFX5 DDM Protocol (reverse engineered from HCI snoop log)
 // Subscribe format:  0x12 p1 p2 p3 p4
@@ -70,6 +83,8 @@ const std::map<std::string, TopicInfo> TOPICS = {
     {"DEVICE_NAME",                        {{0x07, 0x00, 0x00, 0x1C}, "UTF8_STRING",   "Device name"}},
     {"FIRMWARE_VERSION",                   {{0x02, 0x00, 0x00, 0x00}, "UTF8_STRING",   "Firmware version"}},
     {"DEVICE_MODEL",                       {{0x07, 0x00, 0x01, 0x00}, "UTF8_STRING",   "Device model"}},
+    {"SKU",                                {{0x14, 0x00, 0x00, 0x1A}, "UTF8_STRING",   "SKU / exact model"}},
+    {"SERIAL_NUMBER",                      {{0x13, 0x00, 0x00, 0x1A}, "UTF8_STRING",   "Serial number"}},
 };
 
 // All subscribe params as sent by the official Dometic app (reverse engineered)
@@ -78,6 +93,8 @@ static const uint8_t SUBSCRIBE_ALL[][4] = {
     {0x02, 0x00, 0x00, 0x00},  // firmware version
     {0x11, 0x00, 0x00, 0x00},  // MAC address
     {0x07, 0x00, 0x01, 0x00},  // device model
+    {0x14, 0x00, 0x00, 0x1A},  // SKU / exact model
+    {0x13, 0x00, 0x00, 0x1A},  // serial number
     {0x07, 0x00, 0x00, 0x1C},  // device name
     // Echtzeit-Werte (Gruppe 0x1A) - alle zu Entities gemappt
     {0x03, 0x00, 0x00, 0x1A},  // cooler power (compressor)
@@ -415,11 +432,19 @@ void DometicCfxBle::update_entity_(const std::string &topic,
   if (topic == "DEVICE_MODEL") {
     std::string model = this->decode_to_string_(value, type_hint);
     std::string family = family_from_model(model);
+    this->cfx_family_ = family;
     ESP_LOGCONFIG(TAG, "Detected CFX family: %s (model '%s')",
                   family.c_str(), model.c_str());
     if (auto it = text_sensors_.find("MODEL_FAMILY"); it != text_sensors_.end()) {
       it->second->publish_state(family);
     }
+    this->publish_model_name_();
+  }
+
+  if (topic == "SKU") {
+    this->cfx_sku_ = this->decode_to_string_(value, type_hint);
+    ESP_LOGCONFIG(TAG, "CFX SKU: '%s'", this->cfx_sku_.c_str());
+    this->publish_model_name_();
   }
 
   // Update internal state for climate
@@ -444,6 +469,21 @@ void DometicCfxBle::update_entity_(const std::string &topic,
 }
 
 // ----------------- Decode ---------------------------------------------------
+
+void DometicCfxBle::publish_model_name_() {
+  auto it = text_sensors_.find("MODEL_NAME");
+  if (it == text_sensors_.end())
+    return;
+  std::string name;
+  if (!this->cfx_sku_.empty()) {
+    // The SKU is the exact model, e.g. "CFX5 25".
+    name = this->cfx_sku_;
+  } else {
+    std::string family = this->cfx_family_.empty() ? "CFX" : this->cfx_family_;
+    name = family + " " + product_type_name(this->product_type_);
+  }
+  it->second->publish_state(name);
+}
 
 float DometicCfxBle::decode_to_float_(const std::vector<uint8_t> &bytes,
                                       const std::string &type_hint) {

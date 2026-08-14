@@ -86,7 +86,15 @@ class DometicCfxBle : public Component, public ble_client::BLEClientNode {
   std::vector<uint8_t> encode_from_bool_(bool value);
   std::vector<uint8_t> encode_from_float_millidegree_(float value);
 
+  // Publish the derived exact model name (SKU if present, else
+  // "{family} {product type}") to any MODEL_NAME text_sensor.
+  void publish_model_name_();
+
   uint8_t product_type_{0};
+
+  // Cached identity for deriving a readable exact model name.
+  std::string cfx_sku_;
+  std::string cfx_family_;
 
   uint16_t write_handle_{0};
   uint16_t notify_handle_{0};
