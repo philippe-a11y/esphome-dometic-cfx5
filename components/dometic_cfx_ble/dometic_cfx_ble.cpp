@@ -85,7 +85,7 @@ const std::map<std::string, TopicInfo> TOPICS = {
     {"DEVICE_NAME",                        {{0x07, 0x00, 0x00, 0x1C}, "UTF8_STRING",   "Device name"}},
     {"FIRMWARE_VERSION",                   {{0x02, 0x00, 0x00, 0x00}, "UTF8_STRING",   "Firmware version"}},
     {"DEVICE_MODEL",                       {{0x07, 0x00, 0x01, 0x00}, "UTF8_STRING",   "Device model"}},
-    {"SKU",                                {{0x14, 0x00, 0x00, 0x1A}, "UTF8_STRING",   "SKU / exact model"}},
+    {"SKU",                                {{0x14, 0x00, 0x00, 0x1A}, "UTF8_STRING",   "0x14 string (serial on some boxes)"}},
     {"SERIAL_NUMBER",                      {{0x13, 0x00, 0x00, 0x1A}, "UTF8_STRING",   "Serial number"}},
 };
 
@@ -458,9 +458,9 @@ void DometicCfxBle::update_entity_(const std::string &topic,
   }
 
   if (topic == "SKU") {
+    // Note: on some boxes 0x14 carries the serial number, not a model SKU.
     this->cfx_sku_ = this->decode_to_string_(value, type_hint);
-    ESP_LOGCONFIG(TAG, "CFX SKU: '%s'", this->cfx_sku_.c_str());
-    this->publish_model_name_();
+    ESP_LOGCONFIG(TAG, "CFX 0x14 string: '%s'", this->cfx_sku_.c_str());
   }
 
   // Update internal state for climate
@@ -490,14 +490,12 @@ void DometicCfxBle::publish_model_name_() {
   auto it = text_sensors_.find("MODEL_NAME");
   if (it == text_sensors_.end())
     return;
-  std::string name;
-  if (!this->cfx_sku_.empty()) {
-    // The SKU is the exact model, e.g. "CFX5 25".
-    name = this->cfx_sku_;
-  } else {
-    std::string family = this->cfx_family_.empty() ? "CFX" : this->cfx_family_;
-    name = family + " " + product_type_name(this->product_type_);
-  }
+  // Derive from family + product type. The 0x14 topic was assumed to hold
+  // a model SKU, but at least some boxes report a serial number there
+  // (e.g. "SN0756"), so it is not a reliable model name and is no longer
+  // used here.
+  std::string family = this->cfx_family_.empty() ? "CFX" : this->cfx_family_;
+  std::string name = family + " " + product_type_name(this->product_type_);
   it->second->publish_state(name);
 }
 
