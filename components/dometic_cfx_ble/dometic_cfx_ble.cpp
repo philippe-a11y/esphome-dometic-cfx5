@@ -74,6 +74,8 @@ const std::map<std::string, TopicInfo> TOPICS = {
     {"COOLER_POWER",                       {{0x03, 0x00, 0x00, 0x1A}, "INT8_BOOLEAN",  "Cooler power"}},
     {"COMPARTMENT_0_POWER",                {{0x0B, 0x00, 0x00, 0x1A}, "INT8_BOOLEAN",  "Compartment 1 power"}},
     {"BATTERY_VOLTAGE_LEVEL",              {{0x0C, 0x00, 0x00, 0x1A}, "INT32_MILLIVOLT","Battery voltage"}},
+    {"BATTERY_PROTECTION_LEVEL",           {{0x0D, 0x00, 0x00, 0x1A}, "BATTERY_PROTECTION_TEXT", "Battery protection level"}},
+    {"BATTERY_PROTECTION_MODE",            {{0x0D, 0x00, 0x00, 0x1A}, "INT8_NUMBER",   "Battery protection mode"}},
     {"CURRENT",                            {{0x0F, 0x00, 0x00, 0x1A}, "INT32_MILLIAMP", "Current draw"}},
     {"POWER_SOURCE",                       {{0x10, 0x00, 0x00, 0x1A}, "POWER_SOURCE_TEXT", "Power source"}},
     {"BLUETOOTH_MODE",                     {{0x06, 0x00, 0x00, 0x1A}, "INT8_BOOLEAN",  "Bluetooth mode (unused)"}},
@@ -105,6 +107,7 @@ static const uint8_t SUBSCRIBE_ALL[][4] = {
     {0x08, 0x00, 0x00, 0x1A},  // temperature range
     {0x0B, 0x00, 0x00, 0x1A},  // compartment power
     {0x0C, 0x00, 0x00, 0x1A},  // battery voltage
+    {0x0D, 0x00, 0x00, 0x1A},  // battery protection level/mode
     {0x0F, 0x00, 0x00, 0x1A},  // current draw
     {0x10, 0x00, 0x00, 0x1A},  // power source (AC/DC)
     {0x12, 0x00, 0x00, 0x1A},  // door alert
@@ -390,10 +393,23 @@ void DometicCfxBle::update_entity_(const std::string &topic,
   }
 
   if (topic == "DOOR_ALERT") {
-    bool alarm = !value.empty();
-    ESP_LOGD(TAG, "DOOR_ALERT = %s (raw len=%u)", alarm ? "ON" : "OFF", (unsigned)value.size());
-    if (auto it = binary_sensors_.find(topic); it != binary_sensors_.end()) {
-      it->second->publish_state(alarm);
+    // The 0x12 array carries all active system alarms as 2-byte error
+    // codes. Scan for the two we know: 0x17 (23 = door open too long)
+    // and 0x1B (27 = temperature out of the +/-5C band).
+    bool door_alarm = false;
+    bool temp_alarm = false;
+    for (size_t i = 0; i + 1 < value.size(); i += 2) {
+      if (value[i] == 0x17) door_alarm = true;
+      if (value[i] == 0x1B) temp_alarm = true;
+    }
+    ESP_LOGD(TAG, "ALARMS: Door=%s Temp=%s (raw len=%u)",
+             door_alarm ? "ON" : "OFF", temp_alarm ? "ON" : "OFF",
+             (unsigned) value.size());
+    if (auto it = binary_sensors_.find("DOOR_ALERT"); it != binary_sensors_.end()) {
+      it->second->publish_state(door_alarm);
+    }
+    if (auto it = binary_sensors_.find("TEMP_ALERT"); it != binary_sensors_.end()) {
+      it->second->publish_state(temp_alarm);
     }
     return;
   }
@@ -532,6 +548,15 @@ std::string DometicCfxBle::decode_to_string_(const std::vector<uint8_t> &bytes,
       case 0: return "AC";
       case 1: return "DC";
       case 2: return "Solar";
+      default: return "Unknown";
+    }
+  }
+  if (type_hint == "BATTERY_PROTECTION_TEXT") {
+    if (bytes.empty()) return "Unknown";
+    switch (bytes[0]) {
+      case 0: return "Low";
+      case 1: return "Medium";
+      case 2: return "High";
       default: return "Unknown";
     }
   }
