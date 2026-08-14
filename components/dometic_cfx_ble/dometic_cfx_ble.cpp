@@ -227,6 +227,14 @@ void DometicCfxBle::send_number(const std::string &topic, float value) {
   this->send_pub(topic, payload);
 }
 
+void DometicCfxBle::send_enum(const std::string &topic, uint8_t value) {
+  // Enums are encoded as 32-bit little-endian integers.
+  int32_t val32 = value;
+  std::vector<uint8_t> payload(4);
+  memcpy(payload.data(), &val32, 4);
+  this->send_pub(topic, payload);
+}
+
 // ----------------- GATTC callbacks ------------------------------------------
 
 void DometicCfxBle::gattc_event_handler(esp_gattc_cb_event_t event,
@@ -598,6 +606,23 @@ void DometicCfxBleNumber::control(float value) {
     return;
   }
   this->parent_->send_number(this->topic_, value);
+  this->publish_state(value);
+}
+
+void DometicCfxBleSelect::control(const std::string &value) {
+  if (this->parent_ == nullptr) {
+    ESP_LOGW(TAG, "Select has no parent");
+    this->publish_state(value);
+    return;
+  }
+  uint8_t val = 0;
+  if (value == "Low")
+    val = 0;
+  else if (value == "Medium")
+    val = 1;
+  else if (value == "High")
+    val = 2;
+  this->parent_->send_enum(this->topic_, val);
   this->publish_state(value);
 }
 

@@ -13,6 +13,7 @@
 #include "esphome/components/number/number.h"
 #include "esphome/components/text_sensor/text_sensor.h"
 #include "esphome/components/climate/climate.h"
+#include "esphome/components/select/select.h"
 
 #include <cstdint>
 #include <cstring>
@@ -56,6 +57,8 @@ class DometicCfxBle : public Component, public ble_client::BLEClientNode {
       text_sensors_[topic] = entity;
     } else if constexpr (std::is_base_of<climate::Climate, T>::value) {
       climate_[topic] = entity;
+    } else if constexpr (std::is_base_of<select::Select, T>::value) {
+      selects_[topic] = entity;
     } else {
       ESP_LOGW(TAG, "Unknown entity type for topic %s", topic.c_str());
     }
@@ -68,6 +71,7 @@ class DometicCfxBle : public Component, public ble_client::BLEClientNode {
   void send_pub(const std::string &topic, const std::vector<uint8_t> &value);
   void send_switch(const std::string &topic, bool value);
   void send_number(const std::string &topic, float value);
+  void send_enum(const std::string &topic, uint8_t value);
 
   void gattc_event_handler(esp_gattc_cb_event_t event, esp_gatt_if_t gattc_if,
                            esp_ble_gattc_cb_param_t *param) override;
@@ -119,6 +123,7 @@ class DometicCfxBle : public Component, public ble_client::BLEClientNode {
   std::map<std::string, binary_sensor::BinarySensor *> binary_sensors_;
   std::map<std::string, switch_::Switch *> switches_;
   std::map<std::string, number::Number *> numbers_;
+  std::map<std::string, select::Select *> selects_;
   std::map<std::string, text_sensor::TextSensor *> text_sensors_;
   std::map<std::string, climate::Climate *> climate_;
 };
@@ -164,6 +169,19 @@ class DometicCfxBleNumber : public number::Number, public PollingComponent {
   void set_topic(const std::string &topic) { topic_ = topic; }
 
   void control(float value) override;
+  void update() override {}
+
+ protected:
+  DometicCfxBle *parent_{nullptr};
+  std::string topic_;
+};
+
+class DometicCfxBleSelect : public select::Select, public PollingComponent {
+ public:
+  void set_parent(DometicCfxBle *parent) { parent_ = parent; }
+  void set_topic(const std::string &topic) { topic_ = topic; }
+
+  void control(const std::string &value) override;
   void update() override {}
 
  protected:
