@@ -1,5 +1,6 @@
 #include "dometic_cfx_ble.h"
 
+#include <cctype>
 #include "esphome/core/log.h"
 #include "esphome/core/helpers.h"
 #include "esphome/components/esp32_ble_tracker/esp32_ble_tracker.h"
@@ -15,6 +16,32 @@ namespace dometic_cfx_ble {
 static const char *SERVICE_UUID = "537a0400-0995-481f-926c-1604e23fd515";
 static const char *WRITE_UUID   = "537a0401-0995-481f-926c-1604e23fd515";
 static const char *NOTIFY_UUID  = "537a0402-0995-481f-926c-1604e23fd515";
+
+// Infer the CFX generation from Dometic's model/name prefix.
+// Derived from the Mobile Cooling 2.0.32 app. Verified for MC1 (CFX5);
+// the CFX2/CFX3 prefixes are from the app and not hardware-verified here.
+static std::string family_from_model(const std::string &model) {
+  if (model.empty())
+    return "CFX";
+  // Take the prefix up to the first underscore, uppercased.
+  std::string prefix;
+  for (char c : model) {
+    if (c == '_')
+      break;
+    prefix += static_cast<char>(toupper(static_cast<unsigned char>(c)));
+  }
+  auto starts_with = [&](const char *p) {
+    return prefix.rfind(p, 0) == 0;
+  };
+  if (starts_with("MC2") || starts_with("MC3") || starts_with("CFX2"))
+    return "CFX2";
+  if (starts_with("CFX3"))
+    return "CFX3";
+  if (starts_with("MC1") || starts_with("CFX5"))
+    return "CFX5";
+  return "CFX";
+}
+
 
 // CFX5 DDM Protocol (reverse engineered from HCI snoop log)
 // Subscribe format:  0x12 p1 p2 p3 p4
@@ -381,6 +408,18 @@ void DometicCfxBle::update_entity_(const std::string &topic,
     std::string s = this->decode_to_string_(value, type_hint);
     ESP_LOGD(TAG, "%s = %s", topic.c_str(), s.c_str());
     it->second->publish_state(s);
+  }
+
+  // Derived entity: infer the CFX family from the model string and publish
+  // it to any text_sensor mapped to MODEL_FAMILY.
+  if (topic == "DEVICE_MODEL") {
+    std::string model = this->decode_to_string_(value, type_hint);
+    std::string family = family_from_model(model);
+    ESP_LOGCONFIG(TAG, "Detected CFX family: %s (model '%s')",
+                  family.c_str(), model.c_str());
+    if (auto it = text_sensors_.find("MODEL_FAMILY"); it != text_sensors_.end()) {
+      it->second->publish_state(family);
+    }
   }
 
   // Update internal state for climate
