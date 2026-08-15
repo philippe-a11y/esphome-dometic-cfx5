@@ -558,11 +558,12 @@ void DometicCfxBle::update_entity_(const std::string &topic,
     }
     if (auto it = selects_.find("BATTERY_PROTECTION_MODE");
         it != selects_.end()) {
-      if (!value.empty() && value[0] <= 2) {
-        auto opts = it->second->traits.get_options();
-        if (value[0] < opts.size())
-          it->second->publish_state(opts[value[0]]);
-      }
+      // Options are fixed: 0=Low, 1=Medium, 2=High (see select.py). Publish
+      // by index without copying the traits' options vector, whose copy
+      // constructor is deleted in current ESPHome.
+      static const char *const LEVELS[] = {"Low", "Medium", "High"};
+      if (!value.empty() && value[0] <= 2)
+        it->second->publish_state(LEVELS[value[0]]);
     }
     return;
   }
