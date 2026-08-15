@@ -220,6 +220,13 @@ void DometicCfxBle::loop() {
 void DometicCfxBle::dump_config() {
   ESP_LOGCONFIG(TAG, "Dometic CFX BLE (CFX5 protocol):");
   ESP_LOGCONFIG(TAG, "  Product type: %d", this->product_type_);
+  // product_type_ 3 == DZ (dual zone). The second-compartment support is
+  // implemented from the reference protocol but has NOT been verified on
+  // real dual-zone hardware. Warn so nobody mistakes it for tested.
+  if (this->product_type_ == 3) {
+    ESP_LOGW(TAG, "  Dual-zone (DZ) support is EXPERIMENTAL and UNTESTED on "
+                  "real hardware. Please verify compartment 2 carefully.");
+  }
 }
 
 // ----------------- Frame helpers --------------------------------------------
@@ -249,6 +256,71 @@ void DometicCfxBle::send_switch(const std::string &topic, bool value) {
 void DometicCfxBle::send_number(const std::string &topic, float value) {
   auto payload = this->encode_from_float_millidegree_(value);
   this->send_pub(topic, payload);
+}
+
+void DometicCfxBle::set_compartment_temperature_(uint8_t index, float value) {
+  // Compartment 0 keeps the original single-value write path (byte-identical).
+  if (index == 0) {
+    this->cfx_set_temp_ = value;
+    // Single-zone / compartment-0: the box accepts a single int32 here, so
+    // for a 1-compartment box we send exactly what we always have.
+    if (std::isnan(this->cfx_c1_set_temp_)) {
+      this->send_number("COMPARTMENT_0_SET_TEMPERATURE", value);
+      return;
+    }
+    // Dual-zone: send the full array [c0, c1] so the other zone is preserved.
+    std::vector<uint8_t> payload(8);
+    int32_t c0 = static_cast<int32_t>(std::lround(value * 1000.0f));
+    int32_t c1 = static_cast<int32_t>(std::lround(this->cfx_c1_set_temp_ * 1000.0f));
+    memcpy(payload.data(), &c0, 4);
+    memcpy(payload.data() + 4, &c1, 4);
+    this->send_pub("COMPARTMENT_0_SET_TEMPERATURE", payload);
+    return;
+  }
+
+  // Compartment 1 (dual-zone only). Requires compartment 0 to be known so we
+  // don't clobber it. If it isn't known yet, refuse rather than guess.
+  if (std::isnan(this->cfx_set_temp_)) {
+    ESP_LOGW(TAG, "Refusing C1 temp write: compartment 0 not read yet");
+    return;
+  }
+  this->cfx_c1_set_temp_ = value;
+  std::vector<uint8_t> payload(8);
+  int32_t c0 = static_cast<int32_t>(std::lround(this->cfx_set_temp_ * 1000.0f));
+  int32_t c1 = static_cast<int32_t>(std::lround(value * 1000.0f));
+  memcpy(payload.data(), &c0, 4);
+  memcpy(payload.data() + 4, &c1, 4);
+  // Same 0x1A topic as compartment 0; the array length tells the box it's DZ.
+  this->send_pub("COMPARTMENT_0_SET_TEMPERATURE", payload);
+}
+
+void DometicCfxBle::set_compartment_power_(uint8_t index, bool value) {
+  if (index == 0) {
+    this->cfx_power_ = value;
+    if (!this->cfx_c1_power_known_) {
+      // Single-zone / compartment-0 single-value path, unchanged.
+      this->send_switch("COMPARTMENT_0_POWER", value);
+      return;
+    }
+    // Dual-zone: full array [c0, c1].
+    std::vector<uint8_t> payload(8);
+    int32_t c0 = value ? 1 : 0;
+    int32_t c1 = this->cfx_c1_power_ ? 1 : 0;
+    memcpy(payload.data(), &c0, 4);
+    memcpy(payload.data() + 4, &c1, 4);
+    this->send_pub("COMPARTMENT_0_POWER", payload);
+    return;
+  }
+
+  // Compartment 1 power (dual-zone only).
+  this->cfx_c1_power_ = value;
+  this->cfx_c1_power_known_ = true;
+  std::vector<uint8_t> payload(8);
+  int32_t c0 = this->cfx_power_ ? 1 : 0;
+  int32_t c1 = value ? 1 : 0;
+  memcpy(payload.data(), &c0, 4);
+  memcpy(payload.data() + 4, &c1, 4);
+  this->send_pub("COMPARTMENT_0_POWER", payload);
 }
 
 void DometicCfxBle::send_enum(const std::string &topic, uint8_t value) {
@@ -410,9 +482,48 @@ void DometicCfxBle::handle_notify_(const uint8_t *data, uint16_t length) {
 
 // ----------------- Entity update --------------------------------------------
 
+void DometicCfxBle::update_compartment1_twin_(
+    const std::string &comp0_topic, const std::vector<uint8_t> &value,
+    const std::string &type_hint) {
+  // Only relevant for dual-zone boxes. The compartment-0 array frame also
+  // carries compartment 1 at byte offset 4. If the user has declared a
+  // COMPARTMENT_1_* entity, fill it from the same payload. On single-zone
+  // boxes these entities don't exist and this is a no-op, so the SZ path
+  // is completely unaffected.
+  if (comp0_topic == "COMPARTMENT_0_MEASURED_TEMPERATURE") {
+    float v = this->decode_to_float_at_(value, type_hint, 4);
+    if (!std::isnan(v)) {
+      this->cfx_c1_measured_temp_ = v;
+      if (auto it = sensors_.find("COMPARTMENT_1_MEASURED_TEMPERATURE");
+          it != sensors_.end())
+        it->second->publish_state(v);
+    }
+  } else if (comp0_topic == "COMPARTMENT_0_SET_TEMPERATURE") {
+    float v = this->decode_to_float_at_(value, type_hint, 4);
+    if (!std::isnan(v)) {
+      this->cfx_c1_set_temp_ = v;
+      if (auto it = numbers_.find("COMPARTMENT_1_SET_TEMPERATURE");
+          it != numbers_.end())
+        it->second->publish_state(v);
+    }
+  } else if (comp0_topic == "COMPARTMENT_0_DOOR_OPEN") {
+    if (auto it = binary_sensors_.find("COMPARTMENT_1_DOOR_OPEN");
+        it != binary_sensors_.end()) {
+      it->second->publish_state(this->decode_to_bool_at_(value, 4));
+    }
+  } else if (comp0_topic == "COMPARTMENT_0_POWER") {
+    this->cfx_c1_power_ = this->decode_to_bool_at_(value, 4);
+    this->cfx_c1_power_known_ = true;
+  }
+}
+
 void DometicCfxBle::update_entity_(const std::string &topic,
                                    const std::vector<uint8_t> &value,
                                    const std::string &type_hint) {
+  // Dual-zone: also feed the compartment-1 twin from this same frame.
+  // No-op on single-zone (no such entities declared).
+  this->update_compartment1_twin_(topic, value, type_hint);
+
   if (auto it = sensors_.find(topic); it != sensors_.end()) {
     float v = this->decode_to_float_(value, type_hint);
     if (!std::isnan(v)) {
@@ -519,14 +630,26 @@ void DometicCfxBle::update_entity_(const std::string &topic,
     this->cfx_power_ = this->decode_to_bool_(value);
   }
 
-  // Update climate entity when relevant topics change
+  // Update climate entities when relevant topics change. Each climate gets
+  // the values for its own compartment: index 0 uses the compartment-0
+  // cache, index 1 the compartment-1 twin cache (dual-zone only).
   if (!climate_.empty() &&
       (topic == "COMPARTMENT_0_MEASURED_TEMPERATURE" ||
        topic == "COMPARTMENT_0_SET_TEMPERATURE" ||
        topic == "COMPARTMENT_0_POWER")) {
     for (auto &kv : climate_) {
       auto *c = static_cast<DometicCfxBleClimate *>(kv.second);
-      c->update_state(this->cfx_power_, this->cfx_set_temp_, this->cfx_measured_temp_);
+      if (c->get_compartment_index() == 1) {
+        // Dual-zone second compartment. Only update once we have its values.
+        if (!std::isnan(this->cfx_c1_measured_temp_) ||
+            !std::isnan(this->cfx_c1_set_temp_)) {
+          c->update_state(this->cfx_c1_power_, this->cfx_c1_set_temp_,
+                          this->cfx_c1_measured_temp_);
+        }
+      } else {
+        c->update_state(this->cfx_power_, this->cfx_set_temp_,
+                        this->cfx_measured_temp_);
+      }
     }
   }
 }
@@ -556,41 +679,58 @@ void DometicCfxBle::publish_model_name_() {
 
 float DometicCfxBle::decode_to_float_(const std::vector<uint8_t> &bytes,
                                       const std::string &type_hint) {
+  // Single-zone / compartment-0 path: read the first int32. Byte-identical
+  // to the original behaviour.
+  return this->decode_to_float_at_(bytes, type_hint, 0);
+}
+
+float DometicCfxBle::decode_to_float_at_(const std::vector<uint8_t> &bytes,
+                                         const std::string &type_hint,
+                                         size_t offset) {
+  // For dual-zone boxes the compartment values arrive as an int32 array
+  // (one element per compartment). Compartment N lives at byte offset N*4.
+  // Single-zone always uses offset 0, so its decode path is unchanged.
   if (type_hint == "INT32_MILLIDEGREE_CELSIUS") {
-    // 4-byte int32 LE, /1000 = °C
-    if (bytes.size() < 4) return NAN;
+    if (bytes.size() < offset + 4) return NAN;
     int32_t raw;
-    memcpy(&raw, bytes.data(), 4);
+    memcpy(&raw, bytes.data() + offset, 4);
     return static_cast<float>(raw) / 1000.0f;
   }
 
   if (type_hint == "INT32_MILLIVOLT") {
-    // 4-byte uint32 LE, /1000 = V
-    if (bytes.size() < 4) return NAN;
+    if (bytes.size() < offset + 4) return NAN;
     uint32_t raw;
-    memcpy(&raw, bytes.data(), 4);
+    memcpy(&raw, bytes.data() + offset, 4);
     return static_cast<float>(raw) / 1000.0f;
   }
 
   if (type_hint == "INT32_MILLIAMP") {
-    // 4-byte int32 LE, /1000 = A (signed: positive draw, negative charge)
-    if (bytes.size() < 4) return NAN;
+    if (bytes.size() < offset + 4) return NAN;
     int32_t raw;
-    memcpy(&raw, bytes.data(), 4);
+    memcpy(&raw, bytes.data() + offset, 4);
     return static_cast<float>(raw) / 1000.0f;
   }
 
   if (type_hint == "INT8_NUMBER" || type_hint == "UINT8_NUMBER") {
-    if (bytes.empty()) return NAN;
-    return static_cast<float>(bytes[0]);
+    if (bytes.size() <= offset) return NAN;
+    return static_cast<float>(bytes[offset]);
   }
 
   return NAN;
 }
 
 bool DometicCfxBle::decode_to_bool_(const std::vector<uint8_t> &bytes) {
-  if (bytes.empty()) return false;
-  return bytes[0] != 0;
+  return this->decode_to_bool_at_(bytes, 0);
+}
+
+bool DometicCfxBle::decode_to_bool_at_(const std::vector<uint8_t> &bytes,
+                                       size_t offset) {
+  // Compartment power/door arrive as an int32 array on dual-zone boxes;
+  // element N is a 4-byte int32 at offset N*4, non-zero = true. Reading the
+  // first byte of that element is sufficient for a boolean. Offset 0 keeps
+  // the single-zone path unchanged.
+  if (bytes.size() <= offset) return false;
+  return bytes[offset] != 0;
 }
 
 std::string DometicCfxBle::decode_to_string_(const std::vector<uint8_t> &bytes,
@@ -642,7 +782,14 @@ void DometicCfxBleSwitch::write_state(bool state) {
     this->publish_state(state);
     return;
   }
-  this->parent_->send_switch(this->topic_, state);
+  // Compartment power switches use the array-aware writer (dual-zone safe).
+  if (this->topic_ == "COMPARTMENT_0_POWER") {
+    this->parent_->set_compartment_power_(0, state);
+  } else if (this->topic_ == "COMPARTMENT_1_POWER") {
+    this->parent_->set_compartment_power_(1, state);
+  } else {
+    this->parent_->send_switch(this->topic_, state);
+  }
   this->publish_state(state);
 }
 
@@ -652,7 +799,16 @@ void DometicCfxBleNumber::control(float value) {
     this->publish_state(value);
     return;
   }
-  this->parent_->send_number(this->topic_, value);
+  // Compartment set-temperature numbers go through the array-aware writer so
+  // dual-zone preserves the other compartment. Compartment 0 stays on the
+  // unchanged single-value path there. Other numbers use the direct path.
+  if (this->topic_ == "COMPARTMENT_0_SET_TEMPERATURE") {
+    this->parent_->set_compartment_temperature_(0, value);
+  } else if (this->topic_ == "COMPARTMENT_1_SET_TEMPERATURE") {
+    this->parent_->set_compartment_temperature_(1, value);
+  } else {
+    this->parent_->send_number(this->topic_, value);
+  }
   this->publish_state(value);
 }
 
@@ -694,7 +850,8 @@ void DometicCfxBleClimate::control(const climate::ClimateCall &call) {
   if (call.get_mode().has_value()) {
     auto mode = *call.get_mode();
     bool power = (mode != climate::CLIMATE_MODE_OFF);
-    this->parent_->send_switch("COMPARTMENT_0_POWER", power);
+    // index 0: on single-zone this takes the unchanged single-value path.
+    this->parent_->set_compartment_power_(this->compartment_index_, power);
     this->parent_->cfx_power_ = power;
     this->update_state(this->parent_->cfx_power_,
                        this->parent_->cfx_set_temp_,
@@ -703,7 +860,7 @@ void DometicCfxBleClimate::control(const climate::ClimateCall &call) {
 
   if (call.get_target_temperature().has_value()) {
     float temp = *call.get_target_temperature();
-    this->parent_->send_number("COMPARTMENT_0_SET_TEMPERATURE", temp);
+    this->parent_->set_compartment_temperature_(this->compartment_index_, temp);
     this->parent_->cfx_set_temp_ = temp;
     this->update_state(this->parent_->cfx_power_,
                        this->parent_->cfx_set_temp_,

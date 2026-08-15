@@ -84,7 +84,14 @@ class DometicCfxBle : public Component, public ble_client::BLEClientNode {
                       const std::string &type_hint);
 
   float decode_to_float_(const std::vector<uint8_t> &bytes, const std::string &type_hint);
+  float decode_to_float_at_(const std::vector<uint8_t> &bytes, const std::string &type_hint, size_t offset);
   bool decode_to_bool_(const std::vector<uint8_t> &bytes);
+  bool decode_to_bool_at_(const std::vector<uint8_t> &bytes, size_t offset);
+  // Dual-zone: publish the compartment-1 value carried in the same array
+  // frame as compartment 0 (at byte offset 4), if such an entity exists.
+  void update_compartment1_twin_(const std::string &comp0_topic,
+                                 const std::vector<uint8_t> &value,
+                                 const std::string &type_hint);
   std::string decode_to_string_(const std::vector<uint8_t> &bytes, const std::string &type_hint = "");
 
   std::vector<uint8_t> encode_from_bool_(bool value);
@@ -101,6 +108,12 @@ class DometicCfxBle : public Component, public ble_client::BLEClientNode {
   std::string cfx_family_;
   std::string cfx_prod_name_;
   std::string cfx_cms_sku_;
+  // Dual-zone: last known compartment-1 values, needed to rebuild the full
+  // array when writing one compartment. NAN/unknown until first read.
+  float cfx_c1_set_temp_{NAN};
+  float cfx_c1_measured_temp_{NAN};
+  bool cfx_c1_power_{false};
+  bool cfx_c1_power_known_{false};
 
   uint16_t write_handle_{0};
   uint16_t notify_handle_{0};
@@ -114,6 +127,11 @@ class DometicCfxBle : public Component, public ble_client::BLEClientNode {
   bool cfx_power_{false};
   float cfx_measured_temp_{NAN};
   float cfx_set_temp_{NAN};
+  // Dual-zone array writes: rebuild the full 2-element array and set one
+  // index, mirroring the reference implementation. index 0 keeps the
+  // single-zone single-value path byte-identical. Called by climate/number.
+  void set_compartment_temperature_(uint8_t index, float value);
+  void set_compartment_power_(uint8_t index, bool value);
 
  protected:
   uint32_t last_subscribe_ms_{0};
@@ -205,6 +223,9 @@ class DometicCfxBleTextSensor : public text_sensor::TextSensor, public PollingCo
 class DometicCfxBleClimate : public climate::Climate, public Component {
  public:
   void set_parent(DometicCfxBle *parent) { parent_ = parent; }
+  // Which compartment this climate controls. Defaults to 0 (single-zone).
+  void set_compartment_index(uint8_t index) { compartment_index_ = index; }
+  uint8_t get_compartment_index() const { return compartment_index_; }
 
   climate::ClimateTraits traits() override;
   void control(const climate::ClimateCall &call) override;
@@ -213,6 +234,7 @@ class DometicCfxBleClimate : public climate::Climate, public Component {
 
  protected:
   DometicCfxBle *parent_{nullptr};
+  uint8_t compartment_index_{0};
 };
 
 }  // namespace dometic_cfx_ble
