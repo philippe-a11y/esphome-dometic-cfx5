@@ -88,6 +88,9 @@ const std::map<std::string, TopicInfo> TOPICS = {
     {"COMPARTMENT_0_SET_TEMPERATURE",      {{0x05, 0x00, 0x00, 0x1A}, "INT32_MILLIDEGREE_CELSIUS", "Compartment 1 set temp"}},
     {"COOLER_POWER",                       {{0x03, 0x00, 0x00, 0x1A}, "INT8_BOOLEAN",  "Cooler power"}},
     {"COMPARTMENT_0_POWER",                {{0x0B, 0x00, 0x00, 0x1A}, "INT8_BOOLEAN",  "Compartment 1 power"}},
+    // Ice maker power (SZI models, e.g. CFX5 55IM). Simple int32 bool,
+    // read + write, no array. Independent of the dual-zone path.
+    {"ICEMAKER_POWER",                     {{0x11, 0x00, 0x00, 0x1A}, "INT8_BOOLEAN",  "Ice maker power"}},
     {"BATTERY_VOLTAGE_LEVEL",              {{0x0C, 0x00, 0x00, 0x1A}, "INT32_MILLIVOLT","Battery voltage"}},
     {"BATTERY_PROTECTION_LEVEL",           {{0x0D, 0x00, 0x00, 0x1A}, "BATTERY_PROTECTION_TEXT", "Battery protection level"}},
     {"BATTERY_PROTECTION_MODE",            {{0x0D, 0x00, 0x00, 0x1A}, "INT8_NUMBER",   "Battery protection mode"}},
@@ -130,6 +133,7 @@ static const uint8_t SUBSCRIBE_ALL[][4] = {
     {0x07, 0x00, 0x00, 0x1A},  // door open
     {0x08, 0x00, 0x00, 0x1A},  // temperature range
     {0x0B, 0x00, 0x00, 0x1A},  // compartment power
+    {0x11, 0x00, 0x00, 0x1A},  // ice maker power (SZI)
     {0x0C, 0x00, 0x00, 0x1A},  // battery voltage
     {0x0D, 0x00, 0x00, 0x1A},  // battery protection level/mode
     {0x0F, 0x00, 0x00, 0x1A},  // current draw
