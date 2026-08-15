@@ -528,6 +528,28 @@ void DometicCfxBle::update_entity_(const std::string &topic,
   // No-op on single-zone (no such entities declared).
   this->update_compartment1_twin_(topic, value, type_hint);
 
+  // Battery protection (0x0D) can back two entities that share the same BLE
+  // param: a text sensor (LEVEL) and a select (MODE). The param->topic lookup
+  // only yields one name, so handle both explicitly here and publish to
+  // whichever the user declared. This also makes the select show the current
+  // value on connect instead of staying "unknown".
+  if (topic == "BATTERY_PROTECTION_LEVEL" || topic == "BATTERY_PROTECTION_MODE") {
+    if (auto it = text_sensors_.find("BATTERY_PROTECTION_LEVEL");
+        it != text_sensors_.end()) {
+      it->second->publish_state(
+          this->decode_to_string_(value, "BATTERY_PROTECTION_TEXT"));
+    }
+    if (auto it = selects_.find("BATTERY_PROTECTION_MODE");
+        it != selects_.end()) {
+      if (!value.empty() && value[0] <= 2) {
+        auto opts = it->second->traits.get_options();
+        if (value[0] < opts.size())
+          it->second->publish_state(opts[value[0]]);
+      }
+    }
+    return;
+  }
+
   if (auto it = sensors_.find(topic); it != sensors_.end()) {
     float v = this->decode_to_float_(value, type_hint);
     if (!std::isnan(v)) {
