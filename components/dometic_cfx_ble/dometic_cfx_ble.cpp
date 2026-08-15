@@ -24,6 +24,23 @@ static const char *NOTIFY_UUID  = "537a0402-0995-481f-926c-1604e23fd515";
 // by the 0x1C product-info class. Table sourced from Dometic's own product
 // API (firmwareId MC1 = the CFX5 family). Used as a clean offline fallback
 // / normaliser; the box's PROD_NAME string is preferred when present.
+// Normalise the on-device product name into Dometic's readable marketing
+// form: "CFX525" -> "CFX5 25", "CFX575DZ" -> "CFX5 75DZ". The name is a
+// family prefix ("CFX" + one series digit) directly followed by the litre
+// number; we just insert a space between them. Anything not matching this
+// shape is returned unchanged.
+static std::string normalise_product_name(const std::string &raw) {
+  // Expect "CFX" + series digit, then more digits (the litres).
+  if (raw.size() < 5) return raw;
+  if (!(raw[0] == 'C' && raw[1] == 'F' && raw[2] == 'X')) return raw;
+  if (!isdigit(static_cast<unsigned char>(raw[3]))) return raw;
+  // raw[3] is the series digit (e.g. '5'). A space goes after it, before the
+  // litre digits, but only if one isn't already there.
+  if (raw[4] == ' ') return raw;
+  if (!isdigit(static_cast<unsigned char>(raw[4]))) return raw;
+  return raw.substr(0, 4) + " " + raw.substr(4);
+}
+
 static std::string model_from_sku(const std::string &sku) {
   if (sku == "9620015957") return "CFX5 25";
   if (sku == "9620015958") return "CFX5 35";
@@ -693,8 +710,8 @@ void DometicCfxBle::publish_model_name_() {
     // ("CFX5 25"), offline, no cloud.
     name = from_sku;
   } else if (!this->cfx_prod_name_.empty()) {
-    // On-device product name from 0x1C (e.g. "CFX525").
-    name = this->cfx_prod_name_;
+    // On-device product name from 0x1C, normalised ("CFX525" -> "CFX5 25").
+    name = normalise_product_name(this->cfx_prod_name_);
   } else {
     // Fallback: derive from family + product type ("CFX5 Single Zone").
     std::string family = this->cfx_family_.empty() ? "CFX" : this->cfx_family_;
