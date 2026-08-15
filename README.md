@@ -68,15 +68,24 @@ configuration.
 
 ## Model detection
 
-The exact model name is resolved entirely on-device, in three tiers:
+The exact model name is resolved entirely on-device, in three tiers. In
+practice tier 2 is what most boxes hit, because the SKU they report over
+`0x1C` is a trade number that isn't in the CMS SKU table (see note below):
 
-1. **CMS SKU → name table.** The box reports its CMS SKU (e.g.
-   `9620015957`), which maps to Dometic's exact marketing name
-   (`CFX5 25`) via a built-in table - offline, no cloud.
-2. **On-device product name.** If the SKU is unknown, the box's own product
-   name string is used (e.g. `CFX525`).
+1. **CMS SKU → name table.** If the box reports a CMS-style SKU
+   (`9620015957`), it maps to Dometic's exact name (`CFX5 25`) via a
+   built-in table - offline, no cloud.
+2. **On-device product name.** Otherwise the box's own product-name string
+   is used, normalised for readability (`CFX525` → `CFX5 25`). This is the
+   usual path on real firmware.
 3. **Derived name.** As a last resort, family + product type
    (`CFX5 Single Zone`) derived from the firmware model code.
+
+> **Note on the two SKUs.** The box reports its product SKU over `0x1C` as a
+> trade/order number (e.g. `97000050759`). Dometic's product API only indexes
+> the CMS SKU (`9620015957`) and the two aren't locally convertible, so the
+> name comes from the normalised product-name string rather than the SKU
+> table. Both routes yield the same `CFX5 25`.
 
 ### The `0x1C` product-info class
 

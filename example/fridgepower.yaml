@@ -1,5 +1,6 @@
 # Beispielkonfiguration für die Dometic CFX5 ESPHome-Komponente.
-# MAC-Adresse und Secrets anpassen.
+# MAC-Adresse und Secrets anpassen (api_key, ota_password, wifi_ssid,
+# wifi_password gehören in secrets.yaml).
 
 esphome:
   name: fridgepower
@@ -37,8 +38,6 @@ external_components:
     components: [dometic_cfx_ble]
     refresh: 0s
 
-# Optionaler INA226-Stromsensor an der 12V-Zuleitung.
-# Kann entfallen, seit die Box ihren eigenen Strom meldet (CURRENT).
 i2c:
   sda: GPIO4
   scl: GPIO5
@@ -53,7 +52,7 @@ esp32_ble_tracker:
     duration: 30s
 
 ble_client:
-  - mac_address: EC:C9:FF:BF:B4:8A   # <-- eigene CFX5-MAC eintragen
+  - mac_address: AA:BB:CC:DD:EE:FF   # <-- eigene CFX5-MAC eintragen
     id: cfx_ble_client
     auto_connect: true
     on_connect:
@@ -64,7 +63,8 @@ ble_client:
 dometic_cfx_ble:
   id: dometic_cfx_ble1
   ble_client_id: cfx_ble_client
-  product_type: SZ   # SZ = Single Zone, DZ = Dual Zone, SZI = Single Zone + Icemaker
+  product_type: SZ   # SZ = Single Zone | SZI = Single Zone + Icemaker | DZ = Dual Zone
+                     # SZI/DZ sind experimentell und ungetestet (siehe README).
 
 button:
   - platform: template
@@ -78,8 +78,9 @@ button:
           App.safe_reboot();
 
 sensor:
-  # Optionaler externer INA226. Kann entfallen, seit die Box ihren
-  # eigenen Strom meldet (siehe "CFX Strom (intern)" weiter unten).
+  # Optionaler externer INA226-Stromsensor an der 12V-Zuleitung.
+  # Kann entfallen, seit die Box ihren eigenen Strom meldet
+  # (siehe "CFX Strom (intern)" weiter unten).
   - platform: ina226
     address: 0x40
     shunt_resistance: 0.002 ohm
@@ -154,6 +155,8 @@ climate:
   - platform: dometic_cfx_ble
     dometic_cfx_ble_id: dometic_cfx_ble1
     name: "CFX Kühlbox"
+    # Für Dual-Zone eine zweite Climate-Entity mit "compartment: 1" ergänzen
+    # (experimentell, siehe README).
 
 binary_sensor:
   - platform: dometic_cfx_ble
@@ -170,6 +173,13 @@ binary_sensor:
     device_class: problem
     icon: mdi:alarm-light
 
+  - platform: dometic_cfx_ble
+    dometic_cfx_ble_id: dometic_cfx_ble1
+    type: TEMP_ALERT
+    name: "CFX Temperatur-Alarm"
+    device_class: problem
+    icon: mdi:thermometer-alert
+
 text_sensor:
   - platform: dometic_cfx_ble
     dometic_cfx_ble_id: dometic_cfx_ble1
@@ -182,3 +192,76 @@ text_sensor:
     type: POWER_SOURCE
     name: "CFX Stromquelle"
     icon: mdi:power-plug
+
+  - platform: dometic_cfx_ble
+    dometic_cfx_ble_id: dometic_cfx_ble1
+    type: DEVICE_MODEL
+    name: "CFX Modell"
+    icon: mdi:fridge
+
+  - platform: dometic_cfx_ble
+    dometic_cfx_ble_id: dometic_cfx_ble1
+    type: MODEL_FAMILY
+    name: "CFX Familie"
+    icon: mdi:family-tree
+
+  # Genauer Modellname aus der 0x1C-Produktinfo-Klasse (z.B. "CFX5 25").
+  - platform: dometic_cfx_ble
+    dometic_cfx_ble_id: dometic_cfx_ble1
+    type: MODEL_NAME
+    name: "CFX Produkt-Name"
+    icon: mdi:fridge-outline
+
+  - platform: dometic_cfx_ble
+    dometic_cfx_ble_id: dometic_cfx_ble1
+    type: SERIAL_NUMBER
+    name: "CFX Seriennummer"
+    icon: mdi:identifier
+
+  - platform: dometic_cfx_ble
+    dometic_cfx_ble_id: dometic_cfx_ble1
+    type: SKU
+    name: "CFX SKU"
+    icon: mdi:barcode
+
+# Batterieschutz: zeigt die aktuelle Stufe UND stellt sie ein
+# (Low / Medium / High). Ersetzt den früheren reinen Anzeige-Sensor.
+select:
+  - platform: dometic_cfx_ble
+    dometic_cfx_ble_id: dometic_cfx_ble1
+    type: BATTERY_PROTECTION_MODE
+    name: "CFX Batterieschutz"
+    icon: mdi:battery-heart
+
+# --- Optional: Dual-Zone (experimentell, ungetestet) -------------------
+# Für DZ-Boxen (CFX5 75DZ / 95DZ) die zweite Zone so ergänzen:
+#
+# climate:
+#   - platform: dometic_cfx_ble
+#     dometic_cfx_ble_id: dometic_cfx_ble1
+#     name: "CFX Kühlbox Zone 2"
+#     compartment: 1
+#
+# sensor:
+#   - platform: dometic_cfx_ble
+#     dometic_cfx_ble_id: dometic_cfx_ble1
+#     type: COMPARTMENT_1_MEASURED_TEMPERATURE
+#     name: "CFX Ist-Temperatur Zone 2"
+#     unit_of_measurement: "°C"
+#     accuracy_decimals: 1
+#
+# binary_sensor:
+#   - platform: dometic_cfx_ble
+#     dometic_cfx_ble_id: dometic_cfx_ble1
+#     type: COMPARTMENT_1_DOOR_OPEN
+#     name: "CFX Tür offen Zone 2"
+#     device_class: door
+#
+# --- Optional: Ice Maker (SZI, experimentell) --------------------------
+# Für CFX5 55IM:
+#
+# switch:
+#   - platform: dometic_cfx_ble
+#     dometic_cfx_ble_id: dometic_cfx_ble1
+#     type: ICEMAKER_POWER
+#     name: "CFX Ice Maker"
