@@ -20,6 +20,21 @@ static const char *NOTIFY_UUID  = "537a0402-0995-481f-926c-1604e23fd515";
 // Infer the CFX generation from Dometic's model/name prefix.
 // Derived from the Mobile Cooling 2.0.32 app. Verified for MC1 (CFX5);
 // the CFX2/CFX3 prefixes are from the app and not hardware-verified here.
+// Resolve Dometic's exact marketing model name from the CMS SKU reported
+// by the 0x1C product-info class. Table sourced from Dometic's own product
+// API (firmwareId MC1 = the CFX5 family). Used as a clean offline fallback
+// / normaliser; the box's PROD_NAME string is preferred when present.
+static std::string model_from_sku(const std::string &sku) {
+  if (sku == "9620015957") return "CFX5 25";
+  if (sku == "9620015958") return "CFX5 35";
+  if (sku == "9620015959") return "CFX5 45";
+  if (sku == "9620015960") return "CFX5 55";
+  if (sku == "9620015961") return "CFX5 55IM";
+  if (sku == "9620015962") return "CFX5 75DZ";
+  if (sku == "9620015963") return "CFX5 95DZ";
+  return "";  // unknown SKU
+}
+
 static std::string family_from_model(const std::string &model) {
   if (model.empty())
     return "CFX";
@@ -488,6 +503,13 @@ void DometicCfxBle::update_entity_(const std::string &topic,
     this->publish_model_name_();
   }
 
+  if (topic == "PROD_SKU") {
+    // CMS SKU from the 0x1C class, resolvable to a clean model name offline.
+    this->cfx_cms_sku_ = this->decode_to_string_(value, type_hint);
+    ESP_LOGCONFIG(TAG, "CFX CMS SKU (0x1C): '%s'", this->cfx_cms_sku_.c_str());
+    this->publish_model_name_();
+  }
+
   // Update internal state for climate
   if (topic == "COMPARTMENT_0_MEASURED_TEMPERATURE") {
     this->cfx_measured_temp_ = this->decode_to_float_(value, type_hint);
@@ -516,8 +538,13 @@ void DometicCfxBle::publish_model_name_() {
   if (it == text_sensors_.end())
     return;
   std::string name;
-  if (!this->cfx_prod_name_.empty()) {
-    // Exact model name from the 0x1C product-info class (e.g. "CFX525").
+  std::string from_sku = model_from_sku(this->cfx_cms_sku_);
+  if (!from_sku.empty()) {
+    // Cleanest source: CMS SKU resolved to Dometic's exact model name
+    // ("CFX5 25"), offline, no cloud.
+    name = from_sku;
+  } else if (!this->cfx_prod_name_.empty()) {
+    // On-device product name from 0x1C (e.g. "CFX525").
     name = this->cfx_prod_name_;
   } else {
     // Fallback: derive from family + product type ("CFX5 Single Zone").

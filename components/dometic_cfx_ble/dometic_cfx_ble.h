@@ -100,6 +100,7 @@ class DometicCfxBle : public Component, public ble_client::BLEClientNode {
   std::string cfx_sku_;
   std::string cfx_family_;
   std::string cfx_prod_name_;
+  std::string cfx_cms_sku_;
 
   uint16_t write_handle_{0};
   uint16_t notify_handle_{0};
