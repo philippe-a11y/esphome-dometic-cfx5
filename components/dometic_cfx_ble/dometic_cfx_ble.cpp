@@ -87,11 +87,12 @@ const std::map<std::string, TopicInfo> TOPICS = {
     {"DEVICE_MODEL",                       {{0x07, 0x00, 0x01, 0x00}, "UTF8_STRING",   "Device model"}},
     {"SKU",                                {{0x14, 0x00, 0x00, 0x1A}, "UTF8_STRING",   "SKU / article number"}},
     {"SERIAL_NUMBER",                      {{0x13, 0x00, 0x00, 0x1A}, "UTF8_STRING",   "Serial number"}},
-    // Experimental probe of the 0x1C class (product-info?), hypothesised to
-    // hold the marketing name/sku/model. Untested; the box may not answer.
-    {"PROD_NAME",                          {{0x01, 0x00, 0x00, 0x1C}, "UTF8_STRING",   "Product name (0x1C probe)"}},
-    {"PROD_SKU",                           {{0x03, 0x00, 0x00, 0x1C}, "UTF8_STRING",   "Product sku (0x1C probe)"}},
-    {"PROD_MDL",                           {{0x07, 0x00, 0x00, 0x1C}, "UTF8_STRING",   "Product model (0x1C probe)"}},
+    // 0x1C class = on-device product info (verified on CFX5 25, fw 1.0.1).
+    // This is where the exact marketing model name lives, unlike the 0x1A
+    // realtime class. Not known from other CFX integrations.
+    {"PROD_NAME",                          {{0x01, 0x00, 0x00, 0x1C}, "UTF8_STRING",   "Exact model name"}},
+    {"PROD_SKU",                           {{0x03, 0x00, 0x00, 0x1C}, "UTF8_STRING",   "CMS SKU"}},
+    {"PROD_MDL",                           {{0x07, 0x00, 0x00, 0x1C}, "UTF8_STRING",   "Product model code"}},
 };
 
 // All subscribe params as sent by the official Dometic app (reverse engineered)
@@ -478,6 +479,15 @@ void DometicCfxBle::update_entity_(const std::string &topic,
     ESP_LOGCONFIG(TAG, "CFX SKU / article number: '%s'", this->cfx_sku_.c_str());
   }
 
+  if (topic == "PROD_NAME") {
+    // The 0x1C class exposes the exact marketing model name on-device,
+    // e.g. "CFX525". This is the most precise name available.
+    this->cfx_prod_name_ = this->decode_to_string_(value, type_hint);
+    ESP_LOGCONFIG(TAG, "CFX product name (0x1C): '%s'",
+                  this->cfx_prod_name_.c_str());
+    this->publish_model_name_();
+  }
+
   // Update internal state for climate
   if (topic == "COMPARTMENT_0_MEASURED_TEMPERATURE") {
     this->cfx_measured_temp_ = this->decode_to_float_(value, type_hint);
@@ -505,12 +515,15 @@ void DometicCfxBle::publish_model_name_() {
   auto it = text_sensors_.find("MODEL_NAME");
   if (it == text_sensors_.end())
     return;
-  // Derive from family + product type. The 0x14 topic was assumed to hold
-  // a model SKU, but at least some boxes report a serial number there
-  // (e.g. "SN0756"), so it is not a reliable model name and is no longer
-  // used here.
-  std::string family = this->cfx_family_.empty() ? "CFX" : this->cfx_family_;
-  std::string name = family + " " + product_type_name(this->product_type_);
+  std::string name;
+  if (!this->cfx_prod_name_.empty()) {
+    // Exact model name from the 0x1C product-info class (e.g. "CFX525").
+    name = this->cfx_prod_name_;
+  } else {
+    // Fallback: derive from family + product type ("CFX5 Single Zone").
+    std::string family = this->cfx_family_.empty() ? "CFX" : this->cfx_family_;
+    name = family + " " + product_type_name(this->product_type_);
+  }
   it->second->publish_state(name);
 }
 
