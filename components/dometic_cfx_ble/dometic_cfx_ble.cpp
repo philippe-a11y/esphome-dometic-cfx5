@@ -87,6 +87,11 @@ const std::map<std::string, TopicInfo> TOPICS = {
     {"DEVICE_MODEL",                       {{0x07, 0x00, 0x01, 0x00}, "UTF8_STRING",   "Device model"}},
     {"SKU",                                {{0x14, 0x00, 0x00, 0x1A}, "UTF8_STRING",   "SKU / article number"}},
     {"SERIAL_NUMBER",                      {{0x13, 0x00, 0x00, 0x1A}, "UTF8_STRING",   "Serial number"}},
+    // Experimental probe of the 0x1C class (product-info?), hypothesised to
+    // hold the marketing name/sku/model. Untested; the box may not answer.
+    {"PROD_NAME",                          {{0x01, 0x00, 0x00, 0x1C}, "UTF8_STRING",   "Product name (0x1C probe)"}},
+    {"PROD_SKU",                           {{0x03, 0x00, 0x00, 0x1C}, "UTF8_STRING",   "Product sku (0x1C probe)"}},
+    {"PROD_MDL",                           {{0x07, 0x00, 0x00, 0x1C}, "UTF8_STRING",   "Product model (0x1C probe)"}},
 };
 
 // All subscribe params as sent by the official Dometic app (reverse engineered)
@@ -97,6 +102,9 @@ static const uint8_t SUBSCRIBE_ALL[][4] = {
     {0x07, 0x00, 0x01, 0x00},  // device model
     {0x14, 0x00, 0x00, 0x1A},  // SKU / exact model
     {0x13, 0x00, 0x00, 0x1A},  // serial number
+    {0x01, 0x00, 0x00, 0x1C},  // 0x1C probe: product name?
+    {0x03, 0x00, 0x00, 0x1C},  // 0x1C probe: product sku?
+    {0x07, 0x00, 0x00, 0x1C},  // 0x1C probe: product model?
     {0x07, 0x00, 0x00, 0x1C},  // device name
     // Echtzeit-Werte (Gruppe 0x1A) - alle zu Entities gemappt
     {0x03, 0x00, 0x00, 0x1A},  // cooler power (compressor)
