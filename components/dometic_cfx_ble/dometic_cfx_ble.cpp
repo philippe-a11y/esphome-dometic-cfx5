@@ -85,7 +85,7 @@ const std::map<std::string, TopicInfo> TOPICS = {
     {"DEVICE_NAME",                        {{0x07, 0x00, 0x00, 0x1C}, "UTF8_STRING",   "Device name"}},
     {"FIRMWARE_VERSION",                   {{0x02, 0x00, 0x00, 0x00}, "UTF8_STRING",   "Firmware version"}},
     {"DEVICE_MODEL",                       {{0x07, 0x00, 0x01, 0x00}, "UTF8_STRING",   "Device model"}},
-    {"SKU",                                {{0x14, 0x00, 0x00, 0x1A}, "UTF8_STRING",   "0x14 string (serial on some boxes)"}},
+    {"SKU",                                {{0x14, 0x00, 0x00, 0x1A}, "UTF8_STRING",   "SKU / article number"}},
     {"SERIAL_NUMBER",                      {{0x13, 0x00, 0x00, 0x1A}, "UTF8_STRING",   "Serial number"}},
 };
 
@@ -466,9 +466,8 @@ void DometicCfxBle::update_entity_(const std::string &topic,
   }
 
   if (topic == "SKU") {
-    // Note: on some boxes 0x14 carries the serial number, not a model SKU.
     this->cfx_sku_ = this->decode_to_string_(value, type_hint);
-    ESP_LOGCONFIG(TAG, "CFX 0x14 string: '%s'", this->cfx_sku_.c_str());
+    ESP_LOGCONFIG(TAG, "CFX SKU / article number: '%s'", this->cfx_sku_.c_str());
   }
 
   // Update internal state for climate
