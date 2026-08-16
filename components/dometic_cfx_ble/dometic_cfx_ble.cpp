@@ -103,8 +103,15 @@ const std::map<std::string, TopicInfo> TOPICS = {
     // Realtime data group [xx 00 00 1A]
     {"COMPARTMENT_0_MEASURED_TEMPERATURE", {{0x04, 0x00, 0x00, 0x1A}, "INT32_MILLIDEGREE_CELSIUS", "Compartment 1 current temp"}},
     {"COMPARTMENT_0_SET_TEMPERATURE",      {{0x05, 0x00, 0x00, 0x1A}, "INT32_MILLIDEGREE_CELSIUS", "Compartment 1 set temp"}},
-    {"COOLER_POWER",                       {{0x03, 0x00, 0x00, 0x1A}, "INT8_BOOLEAN",  "Cooler power"}},
-    {"COMPARTMENT_0_POWER",                {{0x0B, 0x00, 0x00, 0x1A}, "INT8_BOOLEAN",  "Compartment 1 power"}},
+    // Power parameters. 0x0B is the global cooler switch (superior); 0x03 is
+    // per-compartment power (subordinate, written as an int32 array so dual-zone
+    // can address each compartment). This global-vs-compartment assignment was
+    // verified by behaviour on a single-zone box: turning the compartment off
+    // leaves the global switch on, while turning the global switch off also
+    // drops the compartment. Matches the Home Assistant integration and its
+    // CFX3 (DDM1) path. (An earlier revision had 0x03/0x0B swapped.)
+    {"COOLER_POWER",                       {{0x0B, 0x00, 0x00, 0x1A}, "INT8_BOOLEAN",  "Cooler power"}},
+    {"COMPARTMENT_0_POWER",                {{0x03, 0x00, 0x00, 0x1A}, "INT8_BOOLEAN",  "Compartment 1 power"}},
     // Ice maker power (SZI models, e.g. CFX5 55IM). Simple int32 bool,
     // read + write, no array. Independent of the dual-zone path.
     {"ICEMAKER_POWER",                     {{0x11, 0x00, 0x00, 0x1A}, "INT8_BOOLEAN",  "Ice maker power"}},
@@ -143,13 +150,13 @@ static const uint8_t SUBSCRIBE_ALL[][4] = {
     {0x07, 0x00, 0x00, 0x1C},  // 0x1C probe: product model?
     {0x07, 0x00, 0x00, 0x1C},  // device name
     // Echtzeit-Werte (Gruppe 0x1A) - alle zu Entities gemappt
-    {0x03, 0x00, 0x00, 0x1A},  // cooler power (compressor)
+    {0x03, 0x00, 0x00, 0x1A},  // compartment power (per-compartment, array on DZ)
     {0x04, 0x00, 0x00, 0x1A},  // measured temp
     {0x05, 0x00, 0x00, 0x1A},  // set temp
     {0x06, 0x00, 0x00, 0x1A},  // (bluetooth mode / unused)
     {0x07, 0x00, 0x00, 0x1A},  // door open
     {0x08, 0x00, 0x00, 0x1A},  // temperature range
-    {0x0B, 0x00, 0x00, 0x1A},  // compartment power
+    {0x0B, 0x00, 0x00, 0x1A},  // cooler power (global)
     {0x11, 0x00, 0x00, 0x1A},  // ice maker power (SZI)
     {0x0C, 0x00, 0x00, 0x1A},  // battery voltage
     {0x0D, 0x00, 0x00, 0x1A},  // battery protection level/mode
