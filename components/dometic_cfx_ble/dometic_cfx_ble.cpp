@@ -781,10 +781,13 @@ std::string DometicCfxBle::decode_to_string_(const std::vector<uint8_t> &bytes,
                                               const std::string &type_hint) {
   if (type_hint == "POWER_SOURCE_TEXT") {
     if (bytes.empty()) return "Unknown";
+    // 0=AC and 1=DC are verified on real hardware. 2=Solar is an assumption:
+    // the app exposes a solar option, but the numeric value was never observed
+    // on a box, so treat it as unconfirmed.
     switch (bytes[0]) {
       case 0: return "AC";
       case 1: return "DC";
-      case 2: return "Solar";
+      case 2: return "Solar";  // unconfirmed
       default: return "Unknown";
     }
   }
